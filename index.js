@@ -10,10 +10,11 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+// ✅ Config
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 
-// ✅ User Schema
+// ✅ Schema
 const userSchema = new mongoose.Schema({
     name: String,
     email: { type: String, unique: true },
@@ -25,38 +26,40 @@ const User = mongoose.model("User", userSchema);
 // ✅ Routes
 app.get("/", (req, res) => res.send("Backend is working!"));
 
-// Register endpoint
+// Register route
 app.post("/register", async (req, res) => {
     const { name, email, password } = req.body;
+    console.log("📥 Request body:", req.body);
 
     try {
-        // Check if user already exists
+        // check if user exists
         const existing = await User.findOne({ email });
         if (existing) {
+            console.log("❌ User already exists:", email);
             return res.status(400).json({ message: "User already exists" });
         }
 
-        // ✅ Hash the password
+        // hash password
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Save new user
+        // save user
         const newUser = new User({ name, email, password: hashedPassword });
         await newUser.save();
 
+        console.log("✅ User registered:", email);
         res.json({ message: "User registered successfully" });
     } catch (err) {
         console.error("❌ Error in register:", err);
-        res.status(500).json({ message: "Server error" });
+        res.status(500).json({ message: "Server error", error: err.message });
     }
 });
 
-// ✅ Connect to MongoDB
+// ✅ Mongo connect + start server
 mongoose
     .connect(MONGO_URI)
     .then(() => console.log("✅ Connected to MongoDB"))
     .catch((err) => console.error("MongoDB connection error:", err));
 
-// ✅ Start server
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
 });
