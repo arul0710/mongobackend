@@ -9,11 +9,12 @@ app.use(cors());
 
 // MongoDB Connection
 const uri =
-    "mongodb+srv://Mathew_007:Mathew_007@cluster0.ijlyc.mongodb.net/Mathew_007?retryWrites=true&w=majority";
+    //"mongodb+srv://Mathew_007:Mathew_007@cluster0.ijlyc.mongodb.net/Mathew_007?retryWrites=true&w=majority";
+    'mongodb+srv://arulmaniraj07_db_user:arul_0710@cluster0.vvxlznp.mongodb.net/?retryWrites=true&w=majority'
 
 mongoose
     .connect(uri)
-    .then(() => console.log("✅ Connected to Mathew_007 database!"))
+    .then(() => console.log("✅ Connected to Arul_0710 database!"))
     .catch((err) => console.error("❌ Connection error:", err));
 
 // Schema for users
@@ -80,4 +81,7 @@ app.post("/login", async (req, res) => {
 //
 // 🚀 START SERVER
 //
-app.listen(5000, () => console.log("✅ Server running on http://localhost:5000"));
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`✅ Server running on ${PORT}`));
+
+
