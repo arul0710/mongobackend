@@ -8,9 +8,7 @@ app.use(express.json());
 app.use(cors());
 
 // MongoDB Connection
-const uri =
-    //"mongodb+srv://Mathew_007:Mathew_007@cluster0.ijlyc.mongodb.net/Mathew_007?retryWrites=true&w=majority";
-    'mongodb+srv://arulmaniraj07_db_user:arul_0710@cluster0.vvxlznp.mongodb.net/?retryWrites=true&w=majority'
+const uri = process.env.REACT_APP_API_URL
 
 mongoose
     .connect(uri)
