@@ -54,6 +54,35 @@ app.post("/register", async (req, res) => {
         res.status(500).json({ message: "Server error", error: err.message });
     }
 });
+// Login route
+app.post("/login", async (req, res) => {
+    const { email, password } = req.body;
+    console.log("📥 Login attempt:", req.body);
+
+    try {
+        // Find user
+        const user = await User.findOne({ email });
+        if (!user) {
+            console.log("❌ User not found:", email);
+            return res.status(400).json({ message: "User not found" });
+        }
+
+        // Compare password
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            console.log("❌ Incorrect password for:", email);
+            return res.status(400).json({ message: "Incorrect password" });
+        }
+
+        // Success
+        console.log("✅ User logged in:", email);
+        res.json({ message: "Login successful", user: { name: user.name, email: user.email } });
+    } catch (err) {
+        console.error("❌ Error in login:", err);
+        res.status(500).json({ message: "Server error", error: err.message });
+    }
+});
+
 
 // ✅ Mongo connect + start server
 mongoose
