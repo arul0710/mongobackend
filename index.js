@@ -14,31 +14,29 @@ app.use(cors());
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 
-// ✅ User schema
+// ✅ User Schema (Register + Login)
 const userSchema = new mongoose.Schema({
     name: String,
     email: { type: String, unique: true },
     password: String,
 });
-
 const User = mongoose.model("User", userSchema);
 
-// ✅ Payment schema
+// ✅ Payment Schema
 const paymentSchema = new mongoose.Schema({
-    userEmail: { type: String, required: true },
-    amount: { type: Number, required: true },
-    status: { type: String, enum: ["pending", "success", "failed"], default: "pending" },
-    createdAt: { type: Date, default: Date.now },
+    userEmail: String,
+    amount: Number,
+    status: { type: String, default: "pending" }, // pending | success | failed
 });
-
 const Payment = mongoose.model("Payment", paymentSchema);
 
 // ✅ Routes
 app.get("/", (req, res) => res.send("Backend is working!"));
 
-// Register route
+// Register
 app.post("/register", async (req, res) => {
     const { name, email, password } = req.body;
+
     try {
         const existing = await User.findOne({ email });
         if (existing) return res.status(400).json({ message: "User already exists" });
@@ -53,9 +51,10 @@ app.post("/register", async (req, res) => {
     }
 });
 
-// Login route
+// Login
 app.post("/login", async (req, res) => {
     const { email, password } = req.body;
+
     try {
         const user = await User.findOne({ email });
         if (!user) return res.status(400).json({ message: "User not found" });
@@ -69,45 +68,46 @@ app.post("/login", async (req, res) => {
     }
 });
 
-// ✅ Payment endpoints
-
-// Create payment
+// ✅ Create Payment
 app.post("/api/create-payment", async (req, res) => {
     const { userEmail, amount } = req.body;
+
     try {
-        const payment = new Payment({ userEmail, amount });
-        await payment.save();
-        res.json({ paymentId: payment._id, status: payment.status });
+        const newPayment = new Payment({ userEmail, amount });
+        await newPayment.save();
+
+        res.json({ paymentId: newPayment._id });
     } catch (err) {
-        res.status(500).json({ message: "Server error", error: err.message });
+        res.status(500).json({ message: "Error creating payment", error: err.message });
     }
 });
 
-// Payment webhook (called by payment provider)
-app.post("/api/payment-webhook", async (req, res) => {
-    const { paymentId, status } = req.body; // "success" or "failed"
+// ✅ Check Payment
+app.get("/api/check-payment/:id", async (req, res) => {
     try {
-        const payment = await Payment.findById(paymentId);
-        if (!payment) return res.status(404).json({ message: "Payment not found" });
-
-        payment.status = status;
-        await payment.save();
-        res.json({ message: "Payment updated successfully" });
-    } catch (err) {
-        res.status(500).json({ message: "Server error", error: err.message });
-    }
-});
-
-// Check payment status (frontend polls)
-app.get("/api/check-payment/:paymentId", async (req, res) => {
-    const { paymentId } = req.params;
-    try {
-        const payment = await Payment.findById(paymentId);
+        const payment = await Payment.findById(req.params.id);
         if (!payment) return res.status(404).json({ message: "Payment not found" });
 
         res.json({ status: payment.status });
     } catch (err) {
-        res.status(500).json({ message: "Server error", error: err.message });
+        res.status(500).json({ message: "Error checking payment", error: err.message });
+    }
+});
+
+// ✅ Simulate Webhook (for testing success without real QR)
+app.post("/api/payment-webhook", async (req, res) => {
+    const { paymentId, status } = req.body;
+
+    try {
+        const payment = await Payment.findById(paymentId);
+        if (!payment) return res.status(404).json({ message: "Payment not found" });
+
+        payment.status = status; // success | failed
+        await payment.save();
+
+        res.json({ message: "Payment updated", payment });
+    } catch (err) {
+        res.status(500).json({ message: "Error updating payment", error: err.message });
     }
 });
 
