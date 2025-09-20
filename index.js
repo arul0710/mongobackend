@@ -12,13 +12,13 @@ app.use(cors());
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 
-// ✅ Mongo connection
+// Mongo connection
 mongoose
     .connect(MONGO_URI)
     .then(() => console.log("✅ Connected to MongoDB"))
     .catch((err) => console.error("MongoDB connection error:", err));
 
-// ✅ Payment schema
+// Payment schema
 const paymentSchema = new mongoose.Schema({
     userEmail: { type: String, required: true },
     amount: { type: Number, required: true },
@@ -28,14 +28,12 @@ const paymentSchema = new mongoose.Schema({
 
 const Payment = mongoose.model("Payment", paymentSchema);
 
-// ✅ Create payment endpoint
+// Create a new payment
 app.post("/api/create-payment", async (req, res) => {
     const { userEmail, amount } = req.body;
     try {
         const payment = new Payment({ userEmail, amount });
         await payment.save();
-
-        // In real scenario, generate QR/order from payment provider here
         res.json({ paymentId: payment._id, status: payment.status });
     } catch (err) {
         console.error(err);
@@ -43,16 +41,15 @@ app.post("/api/create-payment", async (req, res) => {
     }
 });
 
-// ✅ Webhook: payment provider calls this after payment
+// Webhook endpoint (called by payment provider)
 app.post("/api/payment-webhook", async (req, res) => {
-    const { paymentId, status } = req.body;
+    const { paymentId, status } = req.body; // "success" or "failed"
     try {
         const payment = await Payment.findById(paymentId);
         if (!payment) return res.status(404).json({ message: "Payment not found" });
 
-        payment.status = status; // "success" or "failed"
+        payment.status = status;
         await payment.save();
-
         res.json({ message: "Payment updated successfully" });
     } catch (err) {
         console.error(err);
@@ -60,13 +57,12 @@ app.post("/api/payment-webhook", async (req, res) => {
     }
 });
 
-// ✅ Check payment status (frontend polls)
+// Check payment status (frontend polls)
 app.get("/api/check-payment/:paymentId", async (req, res) => {
     const { paymentId } = req.params;
     try {
         const payment = await Payment.findById(paymentId);
         if (!payment) return res.status(404).json({ message: "Payment not found" });
-
         res.json({ status: payment.status });
     } catch (err) {
         console.error(err);
