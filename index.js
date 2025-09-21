@@ -89,6 +89,7 @@ app.get("/api/check-payment/:id", async (req, res) => {
 });
 
 // Manually mark payment success (for testing)
+// Manually mark payment success (for testing)
 app.post("/api/mark-success/:id", async (req, res) => {
     try {
         const payment = await Payment.findById(req.params.id);
@@ -101,6 +102,7 @@ app.post("/api/mark-success/:id", async (req, res) => {
         res.status(500).json({ message: "Error marking success", error: err.message });
     }
 });
+
 
 // Connect Mongo + Start server
 mongoose
