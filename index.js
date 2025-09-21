@@ -3,6 +3,8 @@ import mongoose from "mongoose";
 import cors from "cors";
 import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
+import Razorpay from "razorpay";
+import crypto from "crypto";
 
 dotenv.config();
 const app = express();
@@ -11,6 +13,12 @@ app.use(cors());
 
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
+
+// Razorpay instance
+const razorpay = new Razorpay({
+    key_id: process.env.RAZORPAY_KEY_ID,
+    key_secret: process.env.RAZORPAY_KEY_SECRET,
+});
 
 // User Schema
 const userSchema = new mongoose.Schema({
@@ -25,6 +33,8 @@ const paymentSchema = new mongoose.Schema({
     userEmail: String,
     amount: Number,
     status: { type: String, default: "pending" }, // pending | success | failed
+    razorpayOrderId: String,
+    razorpayPaymentId: String,
 });
 const Payment = mongoose.model("Payment", paymentSchema);
 
@@ -64,45 +74,52 @@ app.post("/login", async (req, res) => {
     }
 });
 
-// Create Payment (status stays pending until real payment)
+// Create Razorpay Order
 app.post("/api/create-payment", async (req, res) => {
     const { userEmail, amount } = req.body;
     try {
-        const newPayment = new Payment({ userEmail, amount });
+        const order = await razorpay.orders.create({
+            amount: amount * 100, // amount in paise
+            currency: "INR",
+            receipt: `receipt_${Date.now()}`,
+            payment_capture: 1,
+        });
+
+        const newPayment = new Payment({
+            userEmail,
+            amount,
+            razorpayOrderId: order.id,
+        });
         await newPayment.save();
-        res.json({ paymentId: newPayment._id });
+
+        res.json({ orderId: order.id, amount: order.amount, currency: order.currency, paymentId: newPayment._id });
     } catch (err) {
         res.status(500).json({ message: "Error creating payment", error: err.message });
     }
 });
 
-// Check Payment
-app.get("/api/check-payment/:id", async (req, res) => {
-    try {
-        const payment = await Payment.findById(req.params.id);
-        if (!payment) return res.status(404).json({ message: "Payment not found" });
+// Verify Payment
+app.post("/api/verify-payment", async (req, res) => {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
-        res.json({ status: payment.status });
-    } catch (err) {
-        res.status(500).json({ message: "Error checking payment", error: err.message });
-    }
-});
+    const generated_signature = crypto
+        .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+        .update(razorpay_order_id + "|" + razorpay_payment_id)
+        .digest("hex");
 
-// Manually mark payment success (for testing)
-// Manually mark payment success (for testing)
-app.post("/api/mark-success/:id", async (req, res) => {
-    try {
-        const payment = await Payment.findById(req.params.id);
-        if (!payment) return res.status(404).json({ message: "Payment not found" });
-
-        payment.status = "success";
-        await payment.save();
+    if (generated_signature === razorpay_signature) {
+        // mark payment success in DB
+        const payment = await Payment.findOne({ razorpayOrderId: razorpay_order_id });
+        if (payment) {
+            payment.status = "success";
+            payment.razorpayPaymentId = razorpay_payment_id;
+            await payment.save();
+        }
         res.json({ status: "success" });
-    } catch (err) {
-        res.status(500).json({ message: "Error marking success", error: err.message });
+    } else {
+        res.status(400).json({ status: "failed" });
     }
 });
-
 
 // Connect Mongo + Start server
 mongoose
