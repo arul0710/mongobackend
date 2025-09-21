@@ -1,4 +1,3 @@
-// backend/index.js
 import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
@@ -13,7 +12,7 @@ app.use(cors());
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 
-// ------------------ SCHEMAS ------------------
+// User Schema
 const userSchema = new mongoose.Schema({
     name: String,
     email: { type: String, unique: true },
@@ -21,6 +20,7 @@ const userSchema = new mongoose.Schema({
 });
 const User = mongoose.model("User", userSchema);
 
+// Payment Schema
 const paymentSchema = new mongoose.Schema({
     userEmail: String,
     amount: Number,
@@ -28,10 +28,8 @@ const paymentSchema = new mongoose.Schema({
 });
 const Payment = mongoose.model("Payment", paymentSchema);
 
-// ------------------ ROUTES ------------------
-
-// Test route
-app.get("/", (req, res) => res.send("✅ Backend is working!"));
+// Routes
+app.get("/", (req, res) => res.send("Backend is working!"));
 
 // Register
 app.post("/register", async (req, res) => {
@@ -66,20 +64,12 @@ app.post("/login", async (req, res) => {
     }
 });
 
-// Create Payment (auto success after 10s for demo)
+// Create Payment (status stays pending until real payment)
 app.post("/api/create-payment", async (req, res) => {
     const { userEmail, amount } = req.body;
     try {
         const newPayment = new Payment({ userEmail, amount });
         await newPayment.save();
-
-        // Simulate payment success after 10 seconds
-        setTimeout(async () => {
-            newPayment.status = "success";
-            await newPayment.save();
-            console.log(`✅ Payment ${newPayment._id} auto-marked success`);
-        }, 10000);
-
         res.json({ paymentId: newPayment._id });
     } catch (err) {
         res.status(500).json({ message: "Error creating payment", error: err.message });
@@ -98,7 +88,21 @@ app.get("/api/check-payment/:id", async (req, res) => {
     }
 });
 
-// ------------------ SERVER ------------------
+// Manually mark payment success (for testing)
+app.post("/api/mark-success/:id", async (req, res) => {
+    try {
+        const payment = await Payment.findById(req.params.id);
+        if (!payment) return res.status(404).json({ message: "Payment not found" });
+
+        payment.status = "success";
+        await payment.save();
+        res.json({ status: "success" });
+    } catch (err) {
+        res.status(500).json({ message: "Error marking success", error: err.message });
+    }
+});
+
+// Connect Mongo + Start server
 mongoose
     .connect(MONGO_URI)
     .then(() => console.log("✅ Connected to MongoDB"))
