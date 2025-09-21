@@ -1,10 +1,9 @@
+// backend/index.js
 import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
 import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
-import Razorpay from "razorpay";
-import crypto from "crypto";
 
 dotenv.config();
 const app = express();
@@ -14,7 +13,7 @@ app.use(cors());
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 
-// ------------------ Mongo Schemas ------------------
+// ------------------ SCHEMAS ------------------
 const userSchema = new mongoose.Schema({
     name: String,
     email: { type: String, unique: true },
@@ -26,18 +25,10 @@ const paymentSchema = new mongoose.Schema({
     userEmail: String,
     amount: Number,
     status: { type: String, default: "pending" }, // pending | success | failed
-    razorpayOrderId: String,
-    razorpayPaymentId: String,
 });
 const Payment = mongoose.model("Payment", paymentSchema);
 
-// ------------------ Razorpay Setup ------------------
-const razorpay = new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID,
-    key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
-
-// ------------------ Routes ------------------
+// ------------------ ROUTES ------------------
 
 // Test route
 app.get("/", (req, res) => res.send("✅ Backend is working!"));
@@ -75,58 +66,39 @@ app.post("/login", async (req, res) => {
     }
 });
 
-// Create Razorpay Order
+// Create Payment (auto success after 10s for demo)
 app.post("/api/create-payment", async (req, res) => {
     const { userEmail, amount } = req.body;
     try {
-        const order = await razorpay.orders.create({
-            amount: amount * 100, // convert to paise
-            currency: "INR",
-            payment_capture: 1,
-        });
-
-        const newPayment = new Payment({
-            userEmail,
-            amount,
-            razorpayOrderId: order.id,
-            status: "pending",
-        });
+        const newPayment = new Payment({ userEmail, amount });
         await newPayment.save();
 
-        res.json({ orderId: order.id, amount: order.amount, currency: order.currency });
+        // Simulate payment success after 10 seconds
+        setTimeout(async () => {
+            newPayment.status = "success";
+            await newPayment.save();
+            console.log(`✅ Payment ${newPayment._id} auto-marked success`);
+        }, 10000);
+
+        res.json({ paymentId: newPayment._id });
     } catch (err) {
         res.status(500).json({ message: "Error creating payment", error: err.message });
     }
 });
 
-// Verify Payment
-app.post("/api/verify-payment", async (req, res) => {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+// Check Payment
+app.get("/api/check-payment/:id", async (req, res) => {
     try {
-        const sign = crypto
-            .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-            .update(razorpay_order_id + "|" + razorpay_payment_id)
-            .digest("hex");
+        const payment = await Payment.findById(req.params.id);
+        if (!payment) return res.status(404).json({ message: "Payment not found" });
 
-        if (sign === razorpay_signature) {
-            await Payment.findOneAndUpdate(
-                { razorpayOrderId: razorpay_order_id },
-                { status: "success", razorpayPaymentId: razorpay_payment_id }
-            );
-            return res.json({ status: "success" });
-        } else {
-            await Payment.findOneAndUpdate(
-                { razorpayOrderId: razorpay_order_id },
-                { status: "failed" }
-            );
-            return res.json({ status: "failed" });
-        }
+        res.json({ status: payment.status });
     } catch (err) {
-        res.status(500).json({ message: "Error verifying payment", error: err.message });
+        res.status(500).json({ message: "Error checking payment", error: err.message });
     }
 });
 
-// ------------------ Connect DB + Start Server ------------------
+// ------------------ SERVER ------------------
 mongoose
     .connect(MONGO_URI)
     .then(() => console.log("✅ Connected to MongoDB"))
