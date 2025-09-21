@@ -64,20 +64,12 @@ app.post("/login", async (req, res) => {
     }
 });
 
-// Create Payment + auto-success for demo
+// Create Payment (status stays pending until real payment)
 app.post("/api/create-payment", async (req, res) => {
     const { userEmail, amount } = req.body;
     try {
         const newPayment = new Payment({ userEmail, amount });
         await newPayment.save();
-
-        // Auto-success after 5 sec for demo
-        setTimeout(async () => {
-            newPayment.status = "success";
-            await newPayment.save();
-            console.log("💰 Payment auto-success for demo, ID:", newPayment._id);
-        }, 5000);
-
         res.json({ paymentId: newPayment._id });
     } catch (err) {
         res.status(500).json({ message: "Error creating payment", error: err.message });
@@ -93,6 +85,20 @@ app.get("/api/check-payment/:id", async (req, res) => {
         res.json({ status: payment.status });
     } catch (err) {
         res.status(500).json({ message: "Error checking payment", error: err.message });
+    }
+});
+
+// Manually mark payment success (for testing)
+app.post("/api/mark-success/:id", async (req, res) => {
+    try {
+        const payment = await Payment.findById(req.params.id);
+        if (!payment) return res.status(404).json({ message: "Payment not found" });
+
+        payment.status = "success";
+        await payment.save();
+        res.json({ status: "success" });
+    } catch (err) {
+        res.status(500).json({ message: "Error marking success", error: err.message });
     }
 });
 
