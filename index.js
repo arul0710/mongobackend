@@ -20,7 +20,7 @@ const razorpay = new Razorpay({
     key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
 
-// User Schema
+// MongoDB Schemas
 const userSchema = new mongoose.Schema({
     name: String,
     email: { type: String, unique: true },
@@ -28,11 +28,10 @@ const userSchema = new mongoose.Schema({
 });
 const User = mongoose.model("User", userSchema);
 
-// Payment Schema
 const paymentSchema = new mongoose.Schema({
     userEmail: String,
     amount: Number,
-    status: { type: String, default: "pending" }, // pending | success | failed
+    status: { type: String, default: "pending" },
     razorpayOrderId: String,
     razorpayPaymentId: String,
 });
@@ -79,7 +78,7 @@ app.post("/api/create-payment", async (req, res) => {
     const { userEmail, amount } = req.body;
     try {
         const order = await razorpay.orders.create({
-            amount: amount * 100, // amount in paise
+            amount: amount * 100, // in paise
             currency: "INR",
             receipt: `receipt_${Date.now()}`,
             payment_capture: 1,
@@ -92,29 +91,25 @@ app.post("/api/create-payment", async (req, res) => {
         });
         await newPayment.save();
 
-        res.json({ orderId: order.id, amount: order.amount, currency: order.currency, paymentId: newPayment._id });
+        res.json({ orderId: order.id, amount: order.amount, currency: order.currency });
     } catch (err) {
         res.status(500).json({ message: "Error creating payment", error: err.message });
     }
 });
 
-// Verify Payment
+// Verify Razorpay Payment
 app.post("/api/verify-payment", async (req, res) => {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
-
     const generated_signature = crypto
         .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
         .update(razorpay_order_id + "|" + razorpay_payment_id)
         .digest("hex");
 
     if (generated_signature === razorpay_signature) {
-        // mark payment success in DB
         const payment = await Payment.findOne({ razorpayOrderId: razorpay_order_id });
-        if (payment) {
-            payment.status = "success";
-            payment.razorpayPaymentId = razorpay_payment_id;
-            await payment.save();
-        }
+        payment.status = "success";
+        payment.razorpayPaymentId = razorpay_payment_id;
+        await payment.save();
         res.json({ status: "success" });
     } else {
         res.status(400).json({ status: "failed" });
