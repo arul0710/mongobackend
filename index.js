@@ -14,13 +14,13 @@ app.use(cors());
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 
-// Razorpay instance
+// ✅ Razorpay instance (use env values only!)
 const razorpay = new Razorpay({
     key_id: process.env.RAZORPAY_KEY_ID,
     key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
 
-// MongoDB Schemas
+// ---------------- MongoDB Schemas ----------------
 const userSchema = new mongoose.Schema({
     name: String,
     email: { type: String, unique: true },
@@ -37,8 +37,8 @@ const paymentSchema = new mongoose.Schema({
 });
 const Payment = mongoose.model("Payment", paymentSchema);
 
-// Routes
-app.get("/", (req, res) => res.send("Backend is working!"));
+// ---------------- Routes ----------------
+app.get("/", (req, res) => res.send("✅ Backend is working!"));
 
 // Register
 app.post("/register", async (req, res) => {
@@ -73,7 +73,59 @@ app.post("/login", async (req, res) => {
     }
 });
 
-// Connect Mongo + Start server
+// ✅ Create Order API
+app.post("/create-order", async (req, res) => {
+    try {
+        const { amount, userEmail } = req.body;
+
+        const order = await razorpay.orders.create({
+            amount: Number(amount) * 100,
+            currency: "INR",
+            receipt: "receipt_" + Date.now(),
+        });
+
+        // Save to DB
+        const payment = new Payment({
+            userEmail,
+            amount,
+            status: "created",
+            razorpayOrderId: order.id,
+        });
+        await payment.save();
+
+        res.json(order);
+    } catch (err) {
+        res.status(500).send(err);
+    }
+});
+
+// ✅ Verify Payment API
+app.post("/verify-payment", async (req, res) => {
+    try {
+        const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+
+        const sign = razorpay_order_id + "|" + razorpay_payment_id;
+        const expectedSign = crypto
+            .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+            .update(sign.toString())
+            .digest("hex");
+
+        if (razorpay_signature === expectedSign) {
+            // Update payment in DB
+            await Payment.findOneAndUpdate(
+                { razorpayOrderId: razorpay_order_id },
+                { status: "success", razorpayPaymentId: razorpay_payment_id }
+            );
+            res.json({ success: true, message: "Payment verified successfully" });
+        } else {
+            res.status(400).json({ success: false, message: "Invalid signature" });
+        }
+    } catch (err) {
+        res.status(500).json({ message: "Verification failed", error: err.message });
+    }
+});
+
+// ---------------- Start Server ----------------
 mongoose
     .connect(MONGO_URI)
     .then(() => console.log("✅ Connected to MongoDB"))
